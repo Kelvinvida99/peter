@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Pronóstico de demanda eléctrica del SENI</title>
+
+<style>
+/* ============================================================
+   CONFIGURACIÓN DE COLORES Y TIPOGRAFÍA
+   ============================================================ */
+:root{
+  --navy:#174a73; --blue:#2b6f9f; --blue2:#dcecf7;
+  --red:#c82032;  --red2:#f9e2e5;
+  --ink:#193247;  --muted:#607487;
+  --line:#d7e3ec; --paper:#fff; --bg:#e8f1f7;
+  --radius:13px; --radius-slide:16px;
+  --font: Arial, Helvetica, sans-serif;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; font-family:var(--font);
+  background:linear-gradient(135deg,#e8f1f7 0%,#f6f9fb 55%,#e8eef4 100%);
+  color:var(--ink);
+}
+
+/* ---------- SLIDE ---------- */
+.slide{
+  display:none; position:relative;
+  width:min(100vw,160vh); height:min(56.25vw,90vh);
+  min-height:500px; margin:3vh auto;
+  background:var(--paper); padding:4.4% 5%;
+  border:1px solid #d9e5ee; border-radius:var(--radius-slide);
+  box-shadow:0 12px 34px rgba(32,67,94,.13);
+  overflow:hidden;
+  container-type:size;
+}
+.slide.active{display:block}
+.slide:after{
+  content:""; position:absolute; left:0; right:0; bottom:0; height:5px;
+  background:linear-gradient(90deg,var(--navy) 0 48%,var(--red) 48% 52%,var(--navy) 52% 100%);
+  opacity:.95;
+}
+
+/* ---------- PORTADA ---------- */
+.slide:first-child{
+  background:linear-gradient(135deg,#f8fbfd 0%,#e5f0f7 100%);
+  color:var(--ink); border-left:0;
+}
+.slide:first-child:before{
+  content:""; position:absolute; z-index:-1;
+  right:-5%; top:-15%; width:55%; height:130%;
+  background:
+    linear-gradient(to right,transparent 0 47%,rgba(255,255,255,.92) 47% 53%,transparent 53%),
+    linear-gradient(to bottom,transparent 0 47%,rgba(255,255,255,.92) 47% 53%,transparent 53%),
+    linear-gradient(90deg,#2a6794 0 50%,#c82032 50% 100%);
+  opacity:.10;
+}
+.slide:first-child h1{
+  color:var(--navy);
+  font-size:clamp(30px,3.3vw,52px); margin-top:0;
+}
+.slide:first-child .kicker{color:var(--red)}
+.cover{
+  display:grid; grid-template-columns:minmax(0,36fr) minmax(0,64fr);
+  gap:3%; align-items:center; height:88%;
+}
+.cover-media{height:100%; display:flex; align-items:center; justify-content:center; min-height:0}
+.cover-media img{
+  display:block; width:100%; height:auto; max-height:100%;
+  object-fit:contain;
+  mix-blend-mode:multiply; /* funde el margen blanco de la imagen con el fondo */
+}
+
+/* ---------- TIPOGRAFÍA ---------- */
+.kicker{
+  font-size:clamp(10px,1vw,14px); font-weight:bold;
+  color:var(--red); letter-spacing:.08em;
+}
+h1{
+  color:var(--navy);
+  font-size:clamp(25px,2.8vw,42px);
+  margin:1.2% 0 1.5%;
+  line-height:1.12;
+}
+.accent{height:4px; width:74px; background:var(--red); margin:1% 0 2.2%}
+.body{font-size:clamp(15px,1.35vw,21px); line-height:1.35; max-width:100%}
+.foot{
+  position:absolute; left:5%; bottom:5%;
+  font-size:clamp(10px,.9vw,14px);
+  color:var(--muted); max-width:85%;
+}
+.num{
+  position:absolute; right:4%; bottom:4%;
+  color:var(--muted); font-size:13px;
+}
+
+/* ---------- DASHBOARD / CARDS ---------- */
+.dashboard{display:grid; gap:16px; margin-top:1.5%}
+.dashboard.two  {grid-template-columns:repeat(2,minmax(0,1fr))}
+.dashboard.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.dashboard.four {grid-template-columns:repeat(4,minmax(0,1fr))}
+
+.card{
+  background:#f8fbfd; border:1px solid var(--line);
+  border-radius:var(--radius); padding:18px 20px; min-width:0;
+}
+.card.blue{background:var(--blue2); border-color:#c5ddea}
+.card.red {background:var(--red2);  border-color:#efc3c9}
+
+.label{
+  font-size:12px; text-transform:uppercase; letter-spacing:.07em;
+  color:var(--muted); font-weight:700;
+}
+.value{
+  font-size:clamp(25px,2.5vw,40px); font-weight:800;
+  color:var(--navy); line-height:1.05; margin:7px 0;
+}
+.value.red{color:var(--red)}
+.small{font-size:13px; color:var(--muted); line-height:1.3}
+.mini-title{font-size:17px; font-weight:800; color:var(--navy); margin-bottom:7px}
+
+.status{
+  display:inline-block; padding:5px 9px; border-radius:20px;
+  font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.04em;
+}
+.status.ok    {background:#e3f1ea; color:#23734d}
+.status.review{background:#fff0d9; color:#9a5a00}
+.status.info  {background:var(--blue2); color:var(--navy)}
+
+/* ---------- FLOW (slide 03) ---------- */
+.flow{
+  display:grid; grid-template-columns:repeat(5,minmax(0,1fr));
+  gap:9px; align-items:stretch; margin-top:2%;
+}
+.flow .card{position:relative; padding:15px}
+.flow .card:not(:last-child):after{
+  content:"→"; position:absolute; right:-13px; top:42%;
+  color:var(--red); font-size:22px; font-weight:800; z-index:2;
+}
+.step{
+  width:28px; height:28px; border-radius:50%;
+  background:var(--navy); color:#fff;
+  display:grid; place-items:center;
+  font-weight:800; font-size:12px; margin-bottom:9px;
+}
+.step-red{background:var(--red)}
+
+/* ---------- CHARTS ---------- */
+/* El gráfico ocupa el espacio que dejan el título y las tarjetas,
+   así nunca empuja las tarjetas fuera de la slide */
+.slide.chart-slide.active{display:flex; flex-direction:column}
+.chart-slide .accent{margin-bottom:1.2%}
+/* Gráfico a la izquierda, tarjetas apiladas a la derecha */
+.chart-slide .body{
+  flex:1; min-height:0;
+  display:grid; grid-template-columns:minmax(0,1fr) minmax(170px,21%);
+  gap:2%; align-items:stretch;
+  padding-bottom:5cqh; /* deja libre el número de página */
+}
+.chart-wrap{min-height:0; min-width:0}
+.chart-wrap img{
+  display:block; width:100%; height:100%;
+  object-fit:contain; object-position:left center;
+}
+.chart-kpis{
+  display:grid; grid-template-rows:repeat(3,minmax(0,1fr));
+  gap:12px; align-content:center;
+}
+.chart-kpis .card{padding:10px 14px; display:flex; flex-direction:column; justify-content:center}
+.chart-kpis .value{font-size:clamp(18px,1.7vw,26px)}
+
+/* ---------- RECOMMEND ---------- */
+.recommend{
+  display:grid; grid-template-columns:42px 1fr;
+  gap:12px; align-items:start;
+}
+.recommend .step{margin:0; background:var(--red)}
+
+/* ---------- CONTROLES ---------- */
+.controls{
+  position:fixed; bottom:12px; left:0; right:0;
+  display:flex; justify-content:center; gap:12px;
+  align-items:center; z-index:100;
+}
+#count{
+  background:#fff; color:var(--navy);
+  font-weight:800; font-size:14px;
+  padding:8px 14px; border-radius:24px;
+  border:1px solid var(--line);
+  box-shadow:0 2px 8px rgba(32,67,94,.15);
+}
+button{
+  border:0; border-radius:24px; padding:10px 18px;
+  background:var(--red); color:white; font-weight:bold; cursor:pointer;
+}
+
+/* ---------- UTILIDADES ---------- */
+.mt-10{margin-top:10px}
+.mt-15{margin-top:15px}
+.mt-16{margin-top:16px}
+.mt-17{margin-top:17px}
+.center{text-align:center}
+.text-15{font-size:15px; color:var(--ink)}
+.text-16{font-size:16px; color:var(--ink)}
+
+/* ---------- ADMIN ---------- */
+#admin-toggle{
+  position:fixed; bottom:70px; right:20px; z-index:9999;
+  width:52px; height:52px; border-radius:50%;
+  background:var(--navy); color:#fff; border:0;
+  font-size:24px; cursor:pointer;
+  box-shadow:0 4px 14px rgba(0,0,0,.28);
+  transition:transform .15s ease;
+}
+#admin-toggle:hover{transform:scale(1.08)}
+#admin-panel{
+  position:fixed; top:0; right:0; bottom:0; width:400px;
+  max-width:92vw; background:#fff;
+  box-shadow:-10px 0 30px rgba(0,0,0,.18);
+  transform:translateX(100%);
+  transition:transform .28s cubic-bezier(.4,0,.2,1);
+  z-index:9998;
+  display:flex; flex-direction:column;
+  font-family:var(--font); font-size:13px; color:var(--ink);
+}
+#admin-panel.open{transform:translateX(0)}
+.admin-header{
+  padding:14px 18px; background:var(--navy); color:#fff;
+  display:flex; justify-content:space-between; align-items:center;
+  flex-shrink:0;
+}
+.admin-header h2{margin:0; font-size:15px; font-weight:800; letter-spacing:.02em}
+#admin-close{
+  background:transparent; border:0; color:#fff;
+  font-size:18px; cursor:pointer; padding:2px 8px;
+  border-radius:6px;
+}
+#admin-close:hover{background:rgba(255,255,255,.15)}
+.admin-toolbar{
+  display:flex; gap:6px; padding:10px 16px;
+  border-bottom:1px solid var(--line);
+  flex-wrap:wrap; background:#fafcfd; flex-shrink:0;
+}
+.admin-toolbar button{
+  font-size:12px; padding:7px 11px; border-radius:6px;
+  background:var(--bg); color:var(--navy);
+  font-weight:700; cursor:pointer; border:0;
+  transition:background .15s;
+}
+.admin-toolbar button:hover{background:var(--blue2)}
+#admin-body{flex:1; overflow-y:auto; padding:14px 18px 40px;}
+.admin-group{margin-bottom:14px}
+.admin-group > h3,
+.admin-group > summary{
+  font-size:11px; text-transform:uppercase; letter-spacing:.06em;
+  color:var(--navy); font-weight:800;
+  padding:8px 0 6px; margin:0;
+  border-bottom:1px solid var(--line);
+  cursor:pointer; list-style:none; user-select:none;
+}
+.admin-group > summary::-webkit-details-marker{display:none}
+.admin-group > summary::before{
+  content:"▸"; display:inline-block; width:14px;
+  color:var(--red); font-size:10px; transition:transform .15s;
+}
+.admin-group[open] > summary::before{content:"▾"}
+.admin-field{display:block; margin:10px 0}
+.admin-label{
+  display:block; font-size:11px; color:var(--muted);
+  margin-bottom:4px; font-weight:700;
+}
+.admin-field input[type="text"],
+.admin-field textarea{
+  width:100%; padding:8px 10px;
+  border:1px solid var(--line); border-radius:6px;
+  font-family:inherit; font-size:13px; color:var(--ink);
+  background:#fafcfd; transition:border-color .15s, box-shadow .15s;
+}
+.admin-field input[type="text"]:focus,
+.admin-field textarea:focus{
+  outline:none; border-color:var(--blue);
+  box-shadow:0 0 0 3px rgba(43,111,159,.15);
+}
+.admin-field textarea{resize:vertical; min-height:64px; line-height:1.4;}
+.admin-field input[type="file"]{
+  font-size:11px; width:100%;
+  padding:6px; border:1px dashed var(--line);
+  border-radius:6px; background:#fafcfd;
+}
+.admin-image-preview{
+  display:block; width:100%; max-height:90px;
+  object-fit:contain; margin-top:6px;
+  border:1px solid var(--line); border-radius:6px; background:#fff;
+}
+
+/* ---------- RESPONSIVE ---------- */
+@media(max-width:900px){
+  .dashboard.four,.dashboard.three,.flow{grid-template-columns:1fr 1fr}
+  .flow .card:not(:last-child):after{display:none}
+  .cover{grid-template-columns:1fr; grid-template-rows:auto minmax(0,1fr); gap:4%}
+}
+@media(max-width:700px){
+  .slide{height:84vh; width:94vw; margin:2vh auto; padding:7% 6%; min-height:0}
+  .dashboard.two,.dashboard.three,.dashboard.four,.flow,.chart-kpis{
+    grid-template-columns:1fr;
+  }
+  .body img{width:100%}
+  .foot{bottom:7%}
+  .chart-slide .body{grid-template-columns:1fr; grid-template-rows:minmax(0,1fr) auto}
+  .chart-kpis{grid-template-rows:none; gap:8px}
+  .chart-wrap img{object-position:center}
+}
+</style>
+</head>
+<body>
+
+<script>
+window.CONFIG = {
+  kicker: "PRONÓSTICO DE DEMANDA DEL SENI",
+  autoKicker: true,
+  autoNumber: true
+};
+
+/* Placeholder SVG embebido para los gráficos (se reemplaza desde el panel ⚙) */
+const PLACEHOLDER_CHART = "data:image/svg+xml;utf8," + encodeURIComponent(
+`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400">
+  <rect width="800" height="400" fill="#f8fbfd" stroke="#d7e3ec" stroke-dasharray="8 6" stroke-width="2"/>
+  <text x="400" y="190" font-family="Arial" font-size="22" fill="#607487" text-anchor="middle" font-weight="bold">
+    Sube tu gráfico aquí
+  </text>
+  <text x="400" y="220" font-family="Arial" font-size="14" fill="#607487" text-anchor="middle">
+    Abre el panel ⚙ (Ctrl+E) → slide → "Gráfico" → elegir archivo
+  </text>
+</svg>`);
+</script>
+
+<!-- ============ SLIDE 01 — PORTADA ============ -->
+<section class="slide" data-group="01 · Portada">
+  <div class="cover">
+    <div class="cover-text">
+      <div class="kicker"></div>
+      <h1 data-edit="title">Pronóstico de demanda eléctrica del SENI</h1>
+      <div class="accent"></div>
+      <div class="body">
+        <p data-edit="subtitle">Energía anual 2027–2040 · Demanda máxima mensual 2027–2028</p>
+      </div>
+    </div>
+    <div class="cover-media">
+      <img data-edit="cover" data-edit-type="image" data-edit-label="Imagen de portada"
+           src="Portada.png"
+           alt="Demanda anual de energía 2027–2040 y demanda máxima mensual 2027–2028" />
+    </div>
+  </div>
+  <div class="foot" data-edit="foot">Septiembre 2026 · Informe V0</div>
+  <div class="num"></div>
+</section>
+
+<!-- ============ SLIDE 02 ============ -->
+<section class="slide" data-group="02 · Referencia cuantitativa">
+  <div class="kicker"></div>
+  <h1 data-edit="title">Una referencia cuantitativa para energía y potencia</h1>
+  <div class="accent"></div>
+  <div class="body">
+    <div class="dashboard three">
+      <div class="card blue">
+        <div class="label" data-edit="c1.label">Horizonte energía</div>
+        <div class="value" data-edit="c1.value">2027–2040</div>
+        <div class="small" data-edit="c1.small">Trayectoria anual y sensibilidades.</div>
+      </div>
+      <div class="card">
+        <div class="label" data-edit="c2.label">Horizonte potencia</div>
+        <div class="value" data-edit="c2.value">2027–2028</div>
+        <div class="small" data-edit="c2.small">Demanda máxima mensual y estacionalidad.</div>
+      </div>
+      <div class="card red">
+        <div class="label" data-edit="c3.label">Base 2026</div>
+        <div class="value red" data-edit="c3.value">27,680 GWh</div>
+        <div class="small" data-edit="c3.small">Demanda máxima: 4,292.95 MW.</div>
+      </div>
+    </div>
+    <div class="card mt-16">
+      <div class="mini-title" data-edit="uso.title">Uso del resultado</div>
+      <div class="small text-16" data-edit="uso.text" data-edit-type="textarea">
+        Insumo cuantitativo para análisis y apoyo a la planificación.
+        No sustituye estudios de suficiencia ni decisiones de expansión.
+      </div>
+    </div>
+  </div>
+  <div class="foot" data-edit="foot">2026: 27,680 GWh · 4,292.95 MW</div>
+  <div class="num"></div>
+</section>
+
+<!-- ============ SLIDE 03 ============ -->
+<section class="slide" data-group="03 · Estrategias y controles">
+  <div class="kicker"></div>
+  <h1 data-edit="title">Estrategias de modelación y controles</h1>
+  <div class="accent"></div>
+  <div class="body">
+    <div class="flow">
+      <div class="card"><div class="step">1</div>
+        <div class="mini-title" data-edit="s1.title">Datos</div>
+        <div class="small" data-edit="s1.text">Históricos de energía y demanda máxima.</div></div>
+      <div class="card"><div class="step">2</div>
+        <div class="mini-title" data-edit="s2.title">Modelos</div>
+        <div class="small" data-edit="s2.text">ARIMA / SARIMA y benchmarks.</div></div>
+      <div class="card"><div class="step">3</div>
+        <div class="mini-title" data-edit="s3.title">Backtesting</div>
+        <div class="small" data-edit="s3.text">Error predictivo y comparación.</div></div>
+      <div class="card"><div class="step">4</div>
+        <div class="mini-title" data-edit="s4.title">Diagnóstico</div>
+        <div class="small" data-edit="s4.text">Residuos y controles estadísticos.</div></div>
+      <div class="card red"><div class="step step-red">5</div>
+        <div class="mini-title" data-edit="s5.title">Sensibilidad</div>
+        <div class="small" data-edit="s5.text">PIB y temperatura para escenarios.</div></div>
+    </div>
+    <div class="card blue mt-17">
+      <div class="mini-title" data-edit="pr.title">Principio de selección</div>
+      <div class="small text-15" data-edit="pr.text" data-edit-type="textarea">
+        La evaluación combina desempeño predictivo y controles estadísticos;
+        las sensibilidades se presentan como información complementaria.
+      </div>
+    </div>
+  </div>
+  <div class="foot" data-edit="foot">La selección combina error predictivo y controles estadísticos.</div>
+  <div class="num"></div>
+</section>
+
+<!-- ============ SLIDE 04 — ENERGÍA ============ -->
+<section class="slide chart-slide" data-group="04 · Energía anual">
+  <div class="kicker"></div>
+  <h1 data-edit="title">La energía anual crece, con desaceleración gradual</h1>
+  <div class="accent"></div>
+  <div class="body">
+    <div class="chart-wrap">
+      <img data-edit="chart" data-edit-type="image" data-edit-label="Gráfico energía"
+           alt="Pronóstico anual de energía con intervalo 95%"
+           src="energia.png" onerror="this.src=PLACEHOLDER_CHART" />
+    </div>
+    <div class="chart-kpis">
+      <div class="card blue"><div class="label" data-edit="k1.label">2030</div>
+        <div class="value" data-edit="k1.value">32,435 GWh</div>
+        <div class="small" data-edit="k1.small">+17.18% vs 2026</div></div>
+      <div class="card"><div class="label" data-edit="k2.label">2035</div>
+        <div class="value" data-edit="k2.value">38,331 GWh</div>
+        <div class="small" data-edit="k2.small">+38.48% vs 2026</div></div>
+      <div class="card red"><div class="label" data-edit="k3.label">2040</div>
+        <div class="value red" data-edit="k3.value">44,076 GWh</div>
+        <div class="small" data-edit="k3.small">+59.23% vs 2026</div></div>
+    </div>
+  </div>
+  <div class="num"></div>
+</section>
+
+<!-- ============ SLIDE 05 — DEMANDA MÁXIMA ============ -->
+<section class="slide chart-slide" data-group="05 · Demanda máxima">
+  <div class="kicker"></div>
+  <h1 data-edit="title">La demanda máxima se concentra en julio</h1>
+  <div class="accent"></div>
+  <div class="body">
+    <div class="chart-wrap">
+      <img data-edit="chart" data-edit-type="image" data-edit-label="Gráfico demanda máxima"
+           alt="Demanda máxima mensual central 2027 y 2028"
+           src="demanda-mensual.png" onerror="this.src=PLACEHOLDER_CHART" />
+    </div>
+    <div class="chart-kpis">
+      <div class="card"><div class="label" data-edit="k1.label">Julio 2027</div>
+        <div class="value" data-edit="k1.value">4,579.36 MW</div>
+        <div class="small" data-edit="k1.small">+6.67% vs 2026</div></div>
+      <div class="card red"><div class="label" data-edit="k2.label">Julio 2028</div>
+        <div class="value red" data-edit="k2.value">4,885.25 MW</div>
+        <div class="small" data-edit="k2.small">+13.80% vs 2026</div></div>
+      <div class="card blue"><div class="label" data-edit="k3.label">Patrón</div>
+        <div class="value" data-edit="k3.value">May–Oct</div>
+        <div class="small" data-edit="k3.small">Concentración estacional de niveles elevados.</div></div>
+    </div>
+  </div>
+  <div class="num"></div>
+</section>
+
+<!-- ============ SLIDE 06 ============ -->
+<section class="slide" data-group="06 · Resultados estadísticos">
+  <div class="kicker"></div>
+  <h1 data-edit="title">Los resultados estadísticos difieren entre componentes</h1>
+  <div class="accent"></div>
+  <div class="body">
+    <div class="dashboard four">
+      <div class="card blue"><div class="label" data-edit="c1.label">ARIMA anual</div>
+        <div class="value" data-edit="c1.value">1.348%</div>
+        <div class="small" data-edit="c1.small">WAPE · Ljung–Box 0.0831</div>
+        <div class="status ok mt-10" data-edit="c1.status">Control reportado</div></div>
+      <div class="card"><div class="label" data-edit="c2.label">ARIMAX + PIB</div>
+        <div class="value" data-edit="c2.value">5.135%</div>
+        <div class="small" data-edit="c2.small">WAPE · sensibilidad</div>
+        <div class="status info mt-10" data-edit="c2.status">Sensibilidad</div></div>
+      <div class="card red"><div class="label" data-edit="c3.label">SARIMA mensual</div>
+        <div class="value red" data-edit="c3.value">3.256%</div>
+        <div class="small" data-edit="c3.small">WAPE · Ljung–Box 0.0354</div>
+        <div class="status review mt-10" data-edit="c3.status">Revisión requerida</div></div>
+      <div class="card"><div class="label" data-edit="c4.label">SARIMAX + temperatura</div>
+        <div class="value" data-edit="c4.value">3.520%</div>
+        <div class="small" data-edit="c4.small">WAPE · sensibilidad</div>
+        <div class="status info mt-10" data-edit="c4.status">Sensibilidad</div></div>
+    </div>
+    <div class="card mt-16">
+      <div class="small text-15" data-edit="lectura" data-edit-type="textarea">
+        <b>Lectura:</b> las sensibilidades aportan información para evaluar supuestos
+        y no desplazan automáticamente los componentes centrales.
+      </div>
+    </div>
+  </div>
+  <div class="foot" data-edit="foot">Sensibilidades no desplazan automáticamente los modelos centrales.</div>
+  <div class="num"></div>
+</section>
+
+<!-- ============ SLIDE 07 ============ -->
+<section class="slide" data-group="07 · Integración">
+  <div class="kicker"></div>
+  <h1 data-edit="title">La planificación debe integrar energía, potencia e incertidumbre</h1>
+  <div class="accent"></div>
+  <div class="body">
+    <div class="dashboard three">
+      <div class="card blue"><div class="label" data-edit="c1.label">Energía</div>
+        <div class="value" data-edit="c1.value">2027–2040</div>
+        <div class="small" data-edit="c1.small">Conservar la trayectoria anual completa.</div></div>
+      <div class="card red"><div class="label" data-edit="c2.label">Potencia</div>
+        <div class="value" data-edit="c2.value">May–Oct</div>
+        <div class="small" data-edit="c2.small">Examinar estacionalidad con disponibilidad, mantenimientos, reserva y red.</div></div>
+      <div class="card"><div class="label" data-edit="c3.label">Factor de carga</div>
+        <div class="value" data-edit="c3.value">73.60%</div>
+        <div class="small" data-edit="c3.small">2026 · 71.85% en 2027 · 70.20% en 2028.</div></div>
+    </div>
+    <div class="card mt-16 center">
+      <div class="mini-title" data-edit="quote.title">Pronóstico ≠ decisión de expansión</div>
+      <div class="small" data-edit="quote.text">El resultado debe integrarse con estudios de suficiencia, red, disponibilidad y reserva.</div>
+    </div>
+  </div>
+  <div class="foot" data-edit="foot">Pronóstico ≠ decisión de expansión.</div>
+  <div class="num"></div>
+</section>
+
+<!-- ============ SLIDE 08 ============ -->
+<section class="slide" data-group="08 · Condiciones de lectura">
+  <div class="kicker"></div>
+  <h1 data-edit="title">Condiciones de interpretación y límites</h1>
+  <div class="accent"></div>
+  <div class="body">
+    <div class="dashboard two">
+      <div class="card red"><div class="label" data-edit="c1.label">Control pendiente</div>
+        <div class="value red" data-edit="c1.value">Mensual</div>
+        <div class="small" data-edit="c1.small">Revisión residual antes del uso formal.</div></div>
+      <div class="card"><div class="label" data-edit="c2.label">Especificación</div>
+        <div class="value" data-edit="c2.value">ARIMA / ARIMAX</div>
+        <div class="small" data-edit="c2.small">No atribuir la brecha únicamente al PIB.</div></div>
+      <div class="card"><div class="label" data-edit="c3.label">Intervalos</div>
+        <div class="value" data-edit="c3.value">Estadísticos</div>
+        <div class="small" data-edit="c3.small">No equivalen a capacidad requerida del sistema.</div></div>
+      <div class="card blue"><div class="label" data-edit="c4.label">Sensibilidad térmica</div>
+        <div class="value" data-edit="c4.value">±12 MW</div>
+        <div class="small" data-edit="c4.small">Orden de magnitud para ±1 °C en ejemplos evaluados.</div></div>
+    </div>
+    <div class="card mt-15">
+      <div class="small text-15" data-edit="rule" data-edit-type="textarea">
+        <b>Regla de lectura:</b> comunicar por separado la evidencia anual y mensual.
+      </div>
+    </div>
+  </div>
+  <div class="foot" data-edit="foot">Comunicar por separado la evidencia anual y mensual.</div>
+  <div class="num"></div>
+</section>
+
+<!-- ============ SLIDE 09 ============ -->
+<section class="slide" data-group="09 · Recomendaciones">
+  <div class="kicker"></div>
+  <h1 data-edit="title">Recomendaciones para el uso y actualización</h1>
+  <div class="accent"></div>
+  <div class="body">
+    <div class="dashboard two">
+      <div class="card"><div class="recommend"><div class="step">1</div><div>
+        <div class="mini-title" data-edit="r1.title">Usar la trayectoria anual</div>
+        <div class="small" data-edit="r1.text">Analizar año por año.</div></div></div></div>
+      <div class="card red"><div class="recommend"><div class="step">2</div><div>
+        <div class="mini-title" data-edit="r2.title">Revisar el modelo mensual</div>
+        <div class="small" data-edit="r2.text">Completar la revisión residual antes del uso formal.</div></div></div></div>
+      <div class="card"><div class="recommend"><div class="step">3</div><div>
+        <div class="mini-title" data-edit="r3.title">Preservar trazabilidad</div>
+        <div class="small" data-edit="r3.text">Documentar modelos, backtesting y controles.</div></div></div></div>
+      <div class="card blue"><div class="recommend"><div class="step">4</div><div>
+        <div class="mini-title" data-edit="r4.title">Integrar contexto operativo</div>
+        <div class="small" data-edit="r4.text">Estacionalidad, reserva, disponibilidad y red.</div></div></div></div>
+      <div class="card"><div class="recommend"><div class="step">5</div><div>
+        <div class="mini-title" data-edit="r5.title">Separar sensibilidades</div>
+        <div class="small" data-edit="r5.text">PIB y temperatura como escenarios complementarios.</div></div></div></div>
+      <div class="card"><div class="recommend"><div class="step">6</div><div>
+        <div class="mini-title" data-edit="r6.title">Actualizar</div>
+        <div class="small" data-edit="r6.text">Conservar la trazabilidad de cada ejecución.</div></div></div></div>
+    </div>
+  </div>
+  <div class="foot" data-edit="foot">Síntesis de recomendaciones del capítulo 12.</div>
+  <div class="num"></div>
+</section>
+
+<!-- ============ SLIDE 10 — CONCLUSIONES ============ -->
+<section class="slide" data-group="10 · Conclusiones">
+  <div class="kicker"></div>
+  <h1 data-edit="title">Conclusiones</h1>
+  <div class="accent"></div>
+  <div class="body">
+    <div class="dashboard three">
+      <div class="card blue"><div class="label" data-edit="c1.label">Energía 2026</div>
+        <div class="value" data-edit="c1.value">27,680 GWh</div>
+        <div class="small" data-edit="c1.small">Base de comparación</div></div>
+      <div class="card"><div class="label" data-edit="c2.label">Energía 2040</div>
+        <div class="value" data-edit="c2.value">44,075.69 GWh</div>
+        <div class="small" data-edit="c2.small">+59.23% vs 2026</div></div>
+      <div class="card red"><div class="label" data-edit="c3.label">Máxima julio 2028</div>
+        <div class="value red" data-edit="c3.value">4,885.25 MW</div>
+        <div class="small" data-edit="c3.small">Concentración estacional</div></div>
+    </div>
+    <div class="dashboard two mt-16">
+      <div class="card">
+        <div class="mini-title"><span class="status ok">Anual</span>
+          <span data-edit="a.title">Controles reportados</span></div>
+        <div class="small" data-edit="a.text">El componente anual presenta los controles estadísticos reportados.</div>
+      </div>
+      <div class="card red">
+        <div class="mini-title"><span class="status review">Mensual</span>
+          <span data-edit="b.title">Revisión residual</span></div>
+        <div class="small" data-edit="b.text">El componente mensual requiere revisión antes del uso formal.</div>
+      </div>
+    </div>
+    <div class="card blue mt-16 center">
+      <div class="mini-title" data-edit="close.title">Insumo técnico para planificación</div>
+      <div class="small" data-edit="close.text">Debe interpretarse junto con incertidumbre, trazabilidad y estudios complementarios.</div>
+    </div>
+  </div>
+  <div class="foot" data-edit="foot">Insumo técnico para planificación, junto con incertidumbre, trazabilidad y estudios complementarios.</div>
+  <div class="num"></div>
+</section>
+
+<!-- ============ CONTROLES ============ -->
+<div class="controls">
+  <button onclick="move(-1)">← Anterior</button>
+  <span id="count"></span>
+  <button onclick="move(1)">Siguiente →</button>
+</div>
+
+<!-- ============ PANEL ADMIN ============ -->
+<button id="admin-toggle" title="Editar contenido (Ctrl/Cmd + E)">⚙</button>
+
+<aside id="admin-panel" aria-hidden="true">
+  <div class="admin-header">
+    <h2>Editor de contenido</h2>
+    <button id="admin-close" title="Cerrar">✕</button>
+  </div>
+  <div class="admin-toolbar">
+    <button id="admin-export">⬇ Exportar JSON</button>
+    <button id="admin-import">⬆ Importar JSON</button>
+    <button id="admin-reset">↺ Reset</button>
+    <input type="file" id="admin-import-file" accept="application/json" hidden />
+  </div>
+  <div id="admin-body"></div>
+</aside>
+
+<script>
+/* ============================================================
+   NAVEGACIÓN DEL DECK
+   ============================================================ */
+(function(){
+  const slides = [...document.querySelectorAll('.slide')];
+  const total  = slides.length;
+  const cfg    = window.CONFIG || {};
+
+  if (cfg.autoKicker !== false) {
+    document.querySelectorAll('.kicker').forEach(k => {
+      if (!k.textContent.trim()) k.textContent = cfg.kicker || '';
+    });
+  }
+  if (cfg.autoNumber !== false) {
+    slides.forEach((s, i) => {
+      const n = s.querySelector('.num');
+      if (n && !n.textContent.trim()) {
+        n.textContent = String(i + 1).padStart(2, '0') + ' / ' + total;
+      }
+    });
+  }
+
+  let idx = 0;
+  const counter = document.getElementById('count');
+
+  function show(n) {
+    idx = (n + total) % total;
+    slides.forEach((s, j) => s.classList.toggle('active', j === idx));
+    if (counter) counter.textContent = String(idx + 1).padStart(2, '0') + ' / ' + total;
+  }
+  window.move = d => show(idx + d);
+
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'ArrowRight' || e.key === ' ') move(1);
+    if (e.key === 'ArrowLeft') move(-1);
+  });
+
+  show(0);
+})();
+
+/* ============================================================
+   PANEL DE ADMINISTRACIÓN
+   ============================================================ */
+(function(){
+  const STORAGE_KEY = 'seni-deck-content-v1';
+  const cfg   = window.CONFIG || {};
+  const panel = document.getElementById('admin-panel');
+  const body  = document.getElementById('admin-body');
+
+  function collect() {
+    const globals = [{
+      key: '__kicker__',
+      label: 'Kicker (todas las slides)',
+      type: 'text',
+      get: () => cfg.kicker || '',
+      set: v => {
+        cfg.kicker = v;
+        document.querySelectorAll('.kicker').forEach(k => k.textContent = v);
+      }
+    }];
+
+    const groups = new Map();
+    document.querySelectorAll('[data-edit]').forEach(el => {
+      const slide = el.closest('.slide');
+      const groupName = slide?.dataset.group || 'Otros';
+      const key   = el.dataset.edit;
+      const label = el.dataset.editLabel || humanize(key);
+      const type  = el.dataset.editType || 'text';
+
+      if (!groups.has(groupName)) groups.set(groupName, []);
+      groups.get(groupName).push({
+        key, label, type, el,
+        get: () => type === 'image' ? el.getAttribute('src') : el.textContent,
+        set: v => {
+          if (type === 'image') {
+            // No pisar la imagen real con un valor vacío o el placeholder guardado
+            if (!v || v === PLACEHOLDER_CHART) return;
+            el.setAttribute('src', v);
+          }
+          else el.textContent = v;
+        }
+      });
+    });
+    return { globals, groups };
+  }
+
+  function humanize(key) {
+    return key.replace(/[-_.]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  function build() {
+    body.innerHTML = '';
+    const { globals, groups } = collect();
+
+    const gSec = document.createElement('div');
+    gSec.className = 'admin-group';
+    const gTitle = document.createElement('h3');
+    gTitle.textContent = 'Global';
+    gSec.appendChild(gTitle);
+    globals.forEach(f => gSec.appendChild(fieldEl(f)));
+    body.appendChild(gSec);
+
+    groups.forEach((fields, name) => {
+      const det = document.createElement('details');
+      det.className = 'admin-group';
+      det.open = true;
+      const sum = document.createElement('summary');
+      sum.textContent = name;
+      det.appendChild(sum);
+      fields.forEach(f => det.appendChild(fieldEl(f)));
+      body.appendChild(det);
+    });
+  }
+
+  function fieldEl(f) {
+    const wrap = document.createElement('label');
+    wrap.className = 'admin-field';
+    const lbl = document.createElement('span');
+    lbl.className = 'admin-label';
+    lbl.textContent = f.label;
+    wrap.appendChild(lbl);
+
+    if (f.type === 'image') {
+      const prev = document.createElement('img');
+      prev.className = 'admin-image-preview';
+      prev.src = f.get();
+      prev.alt = '';
+      wrap.appendChild(prev);
+
+      const file = document.createElement('input');
+      file.type = 'file';
+      file.accept = 'image/*';
+      file.addEventListener('change', e => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          f.set(reader.result);
+          prev.src = reader.result;
+          save();
+        };
+        reader.readAsDataURL(file);
+      });
+      wrap.appendChild(file);
+    } else if (f.type === 'textarea') {
+      const ta = document.createElement('textarea');
+      ta.value = f.get();
+      ta.addEventListener('input', () => { f.set(ta.value); save(); });
+      wrap.appendChild(ta);
+    } else {
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.value = f.get();
+      inp.addEventListener('input', () => { f.set(inp.value); save(); });
+      wrap.appendChild(inp);
+    }
+    return wrap;
+  }
+
+  function serialize() {
+    const { globals, groups } = collect();
+    const out = { version: 1, global: {}, groups: {} };
+    globals.forEach(f => out.global[f.key] = f.get());
+    groups.forEach((fields, name) => {
+      out.groups[name] = {};
+      fields.forEach(f => out.groups[name][f.key] = f.get());
+    });
+    return out;
+  }
+
+  function apply(state) {
+    const { globals, groups } = collect();
+    if (state.global) {
+      globals.forEach(f => { if (f.key in state.global) f.set(state.global[f.key]); });
+    }
+    if (state.groups) {
+      groups.forEach((fields, name) => {
+        const g = state.groups[name];
+        if (!g) return;
+        fields.forEach(f => { if (f.key in g) f.set(g[f.key]); });
+      });
+    }
+    build();
+  }
+
+  function save() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(serialize())); }
+    catch (e) { console.warn('No se pudo guardar:', e); }
+  }
+
+  function loadFromStorage() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return false;
+      apply(JSON.parse(raw));
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function exportJSON() {
+    const data = serialize();
+    data.exportedAt = new Date().toISOString();
+    data.template   = 'SENI · Pronóstico de demanda';
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = 'deck-content-' + new Date().toISOString().slice(0,10) + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function importJSON(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try { apply(JSON.parse(reader.result)); save(); }
+      catch (e) { alert('JSON inválido:\n' + e.message); }
+    };
+    reader.readAsText(file);
+  }
+
+  document.getElementById('admin-toggle').addEventListener('click', () => {
+    panel.classList.toggle('open');
+    panel.setAttribute('aria-hidden', panel.classList.contains('open') ? 'false' : 'true');
+  });
+  document.getElementById('admin-close').addEventListener('click', () => {
+    panel.classList.remove('open');
+    panel.setAttribute('aria-hidden', 'true');
+  });
+  document.getElementById('admin-export').addEventListener('click', exportJSON);
+  document.getElementById('admin-import').addEventListener('click', () => {
+    document.getElementById('admin-import-file').click();
+  });
+  document.getElementById('admin-import-file').addEventListener('change', e => {
+    if (e.target.files[0]) importJSON(e.target.files[0]);
+    e.target.value = '';
+  });
+  document.getElementById('admin-reset').addEventListener('click', () => {
+    if (confirm('¿Descartar los cambios guardados y recargar el deck?')) {
+      localStorage.removeItem(STORAGE_KEY);
+      location.reload();
+    }
+  });
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') {
+      e.preventDefault();
+      panel.classList.toggle('open');
+    }
+  });
+
+  build();
+  loadFromStorage();
+})();
+</script>
+
+</body>
+</html>
